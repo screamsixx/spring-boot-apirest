@@ -18,7 +18,8 @@ class WebSecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable()) // Desactiva CSRF
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.POST, "/api/user/login","/api/user/register").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/user/login","/api/user/register","/api/atm/cashout").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/atm/resumen").permitAll()
                 .anyRequest().authenticated() // Requiere autenticación para cualquier otra solicitud
             )
             .addFilterAfter(new JWTAuthorizationFilter(SECRET), UsernamePasswordAuthenticationFilter.class);

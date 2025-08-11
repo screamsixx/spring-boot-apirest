@@ -31,8 +31,9 @@ public class UserController extends BaseController {
      * URL: POST /user/login
      */
     @PostMapping("/user/login")
-    public CompletableFuture<ResponseEntity<?>> login(@RequestParam("user") String username, @RequestParam("password") String pwd) {
-        
+    public CompletableFuture<ResponseEntity<?>> login(@RequestParam("user") String username,
+            @RequestParam("password") String pwd) {
+
         // 1. Autenticar contra la base de datos usando el servicio
         Optional<AppUser> userOptional = appUserService.authenticate(username, pwd);
 
@@ -46,8 +47,7 @@ public class UserController extends BaseController {
         } else {
             // 3. Si la autenticación falla, devuelve un error 401 (Unauthorized)
             return CompletableFuture.completedFuture(
-                ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario o contraseña incorrectos")
-            );
+                    ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario o contraseña incorrectos"));
         }
     }
 
@@ -57,13 +57,14 @@ public class UserController extends BaseController {
      * URL: POST /user/register
      */
     @PostMapping("/user/register")
-    public ResponseEntity<AppUser> register(@RequestBody AppUser newUser) {
+    public ResponseEntity<?> register(@RequestBody AppUser newUser) { // <-- CAMBIO CLAVE AQUÍ
         Optional<AppUser> createdUser = appUserService.createUser(newUser);
 
         // Si el usuario se creó, devuelve el objeto guardado y un estado 201 (Created).
-        // Si ya existía, devuelve un estado 409 (Conflict).
+        // Si ya existía, devuelve un mensaje de error y un estado 409 (Conflict).
         return createdUser
-                .map(user -> new ResponseEntity<>(user, HttpStatus.CREATED))
-                .orElse(new ResponseEntity<>(HttpStatus.CONFLICT));
+                .<ResponseEntity<?>>map(user -> new ResponseEntity<>(user, HttpStatus.CREATED))
+                .orElse(ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("El usuario ya existe, escoge otro nombre de usuario"));
     }
 }

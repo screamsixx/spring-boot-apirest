@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -22,55 +21,49 @@ class WebSecurityConfig {
     @Value("${security.static.secret}")
     private String SECRET;
 
-    /**
-     * Este bean le dice a Spring Security que IGNORE por completo la cadena de filtros
-     * para las rutas especificadas. Esta es la forma más efectiva de hacer una ruta pública.
-     */
-    @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return (web) -> web.ignoring().requestMatchers(
-            "/api/atm/**",
-            "/api/user/login",
-            "/api/user/register"
-        );
-    }
-
-    /**
-     * Este bean configura la seguridad para TODAS LAS DEMÁS rutas que NO fueron ignoradas.
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         
-        // 1. Aplicar la configuración de CORS.
+        // 1. Aplicar la configuración de CORS PRIMERO.
+        // Esto asegura que las cabeceras de CORS se añadan a CADA respuesta.
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         
-        // 2. Desactivar CSRF.
+        // 2. Desactivar CSRF (no se usa en APIs RESTful con JWT).
         http.csrf(AbstractHttpConfigurer::disable);
 
-        // 3. Configurar la API para que sea "stateless" (sin estado).
+        // 3. Desactivar la gestión de sesiones (la API es "stateless").
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
-        // 4. Configurar las reglas de autorización.
+        // 4. Desactivar los mecanismos de login por defecto de Spring.
+        http.formLogin(AbstractHttpConfigurer::disable);
+        http.httpBasic(AbstractHttpConfigurer::disable);
+
+        // 5. Configurar las reglas de autorización de las rutas.
+        // Aquí le decimos a Spring que procese estas rutas, pero que les permita el acceso.
         http.authorizeHttpRequests(auth -> auth
-            // Como las rutas públicas ya fueron ignoradas, aquí solo necesitamos
-            // decir que cualquier otra ruta requiere autenticación.
+            // Todas las rutas del cajero y de usuario son públicas.
+            .requestMatchers("/api/atm/**", "/api/user/**").permitAll()
+            // Cualquier otra ruta futura requerirá autenticación.
             .anyRequest().authenticated()
         );
         
-        // 5. Añadir tu filtro JWT para que se aplique a las rutas protegidas.
+        // 6. Añadir tu filtro JWT para que se aplique a las rutas protegidas (si las hubiera).
         http.addFilterAfter(new JWTAuthorizationFilter(SECRET), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    /**
-     * Define la configuración de CORS.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
+        
+        // Orígenes permitidos.
         configuration.setAllowedOrigins(List.of("*")); 
+        
+        // Métodos HTTP permitidos.
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        
+        // Cabeceras permitidas.
         configuration.setAllowedHeaders(List.of("*"));
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

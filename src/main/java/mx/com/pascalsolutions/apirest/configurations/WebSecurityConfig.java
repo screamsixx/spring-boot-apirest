@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -21,54 +22,55 @@ class WebSecurityConfig {
     @Value("${security.static.secret}")
     private String SECRET;
 
+    /**
+     * Este bean le dice a Spring Security que IGNORE por completo la cadena de filtros
+     * para las rutas especificadas. Esta es la forma más efectiva de hacer una ruta pública.
+     */
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers(
+            "/api/atm/**",
+            "/api/user/login",
+            "/api/user/register"
+        );
+    }
+
+    /**
+     * Este bean configura la seguridad para TODAS LAS DEMÁS rutas que NO fueron ignoradas.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         
-        // --- CONFIGURACIÓN ESENCIAL PARA UNA API RESTful ---
-
-        // 1. Aplicar la configuración de CORS PRIMERO.
+        // 1. Aplicar la configuración de CORS.
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         
-        // 2. Desactivar CSRF (Cross-Site Request Forgery) porque no usamos cookies.
+        // 2. Desactivar CSRF.
         http.csrf(AbstractHttpConfigurer::disable);
 
-        // 3. Desactivar la gestión de sesiones. ¡CRÍTICO! Esto le dice a Spring que no guarde ningún estado.
+        // 3. Configurar la API para que sea "stateless" (sin estado).
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
-        // 4. Desactivar los formularios de login y la autenticación básica HTTP. ¡CLAVE PARA EVITAR ERRORES INTERMITENTES!
-        // Esto previene que Spring Security intente redirigir o mostrar pop-ups de autenticación.
-        http.formLogin(AbstractHttpConfigurer::disable);
-        http.httpBasic(AbstractHttpConfigurer::disable);
-
-        // 5. Configurar las reglas de autorización de las rutas.
+        // 4. Configurar las reglas de autorización.
         http.authorizeHttpRequests(auth -> auth
-            // Todas las rutas del cajero son públicas.
-            .requestMatchers("/api/atm/**").permitAll()
-            // Las rutas de usuario para login/registro son públicas.
-            .requestMatchers("/api/user/login", "/api/user/register").permitAll()
-            // Todas las demás rutas (si las hubiera) requieren autenticación.
+            // Como las rutas públicas ya fueron ignoradas, aquí solo necesitamos
+            // decir que cualquier otra ruta requiere autenticación.
             .anyRequest().authenticated()
         );
         
-        // 6. Añadir tu filtro personalizado para la autorización JWT (si lo usas para otras rutas).
-        // Si ninguna ruta es autenticada, esta línea podría incluso comentarse.
+        // 5. Añadir tu filtro JWT para que se aplique a las rutas protegidas.
         http.addFilterAfter(new JWTAuthorizationFilter(SECRET), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
+    /**
+     * Define la configuración de CORS.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Orígenes permitidos. Usar "*" es bueno para desarrollo. 
-        // En producción podrías cambiarlo a "https://fancy-queijadas-53b9c4.netlify.app"
         configuration.setAllowedOrigins(List.of("*")); 
-        
-        // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        
-        // Cabeceras permitidas
         configuration.setAllowedHeaders(List.of("*"));
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

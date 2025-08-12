@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -12,6 +14,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 class WebSecurityConfig {
@@ -21,45 +24,46 @@ class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // 1. Habilita CORS usando la configuración del bean de abajo.
-        // Esta es la pieza clave que faltaba.
+        // 1. Aplicar la configuración de CORS PRIMERO.
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         
-        // 2. Desactiva CSRF (esto ya lo tenías).
-        http.csrf(csrf -> csrf.disable());
+        // 2. Desactivar CSRF (Cross-Site Request Forgery).
+        http.csrf(AbstractHttpConfigurer::disable);
 
-        // 3. Define las reglas de autorización (las tuyas, ya corregidas).
+        // 3. Desactivar la gestión de sesiones. Esencial para APIs REST y JWT.
+        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+
+        // 4. Configurar las reglas de autorización de las rutas.
         http.authorizeHttpRequests(auth -> auth
-            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-            .requestMatchers(HttpMethod.POST, "/api/user/login", "/api/user/register").permitAll()
-            // Hice un pequeño ajuste aquí para que cashout también sea público, como en tu código.
-            .requestMatchers(HttpMethod.POST, "/api/atm/cashout").permitAll() 
-            .requestMatchers(HttpMethod.GET, "/api/atm/resumen").permitAll()
+            // Rutas públicas que no requieren autenticación
+            .requestMatchers("/api/user/login", "/api/user/register").permitAll()
+            .requestMatchers("/api/atm/**").permitAll() // Simplificado para permitir todo bajo /api/atm/
+            
+            // Todas las demás rutas requieren autenticación.
             .anyRequest().authenticated()
         );
         
-        // 4. Añade tu filtro JWT.
+        // 5. Añadir tu filtro personalizado para la autorización JWT.
         http.addFilterAfter(new JWTAuthorizationFilter(SECRET), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    /**
-     * Este bean define la configuración de CORS para toda la aplicación.
-     * Es la fuente de configuración que utiliza http.cors() arriba.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Permite peticiones desde cualquier origen.
-        configuration.setAllowedOrigins(Arrays.asList("*"));
-        // Permite los métodos HTTP que necesitas.
+        
+        // Orígenes permitidos (puedes ser más específico si quieres)
+        configuration.setAllowedOrigins(List.of("*")); 
+        
+        // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        // Permite todas las cabeceras.
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+        
+        // Cabeceras permitidas
+        configuration.setAllowedHeaders(List.of("*"));
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // Aplica esta configuración a todas las rutas de tu API.
+        // Aplicar esta configuración a todas las rutas.
         source.registerCorsConfiguration("/**", configuration);
         
         return source;
